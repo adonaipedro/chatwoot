@@ -60,6 +60,10 @@ export default {
       type: Function,
       default: () => {},
     },
+    toggleVideoRecorder: {
+      type: Function,
+      default: () => {},
+    },
     toggleAudioRecorderPlayPause: {
       type: Function,
       default: () => {},
@@ -202,6 +206,13 @@ export default {
       if (this.isEditorDisabled) return false;
       return this.showAudioRecorder && this.isRecordingAudio;
     },
+    showVideoRecorderButton() {
+      if (this.isEditorDisabled) return false;
+      if (this.isALineChannel || this.isATiktokChannel) return false;
+      // A recorded clip is just an attachment, so allow it wherever the
+      // paperclip is allowed (channel accepts files / private note).
+      return this.showFileUpload || this.isNote;
+    },
     isInstagramDM() {
       return this.conversationType === 'instagram_direct_message';
     },
@@ -329,6 +340,15 @@ export default {
         sm
         :label="recordingAudioDurationText"
         @click="toggleAudioRecorderPlayPause"
+      />
+      <NextButton
+        v-if="showVideoRecorderButton"
+        v-tooltip.top-end="$t('CONVERSATION.REPLYBOX.TIP_VIDEORECORDER_ICON')"
+        icon="i-ph-video-camera"
+        slate
+        faded
+        sm
+        @click="toggleVideoRecorder"
       />
       <NextButton
         v-if="showMessageSignatureButton"

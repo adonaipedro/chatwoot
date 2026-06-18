@@ -20,6 +20,7 @@ import QuotedEmailPreview from './QuotedEmailPreview.vue';
 import { REPLY_EDITOR_MODES } from 'dashboard/components/widgets/WootWriter/constants';
 import WootMessageEditor from 'dashboard/components/widgets/WootWriter/Editor.vue';
 import AudioRecorder from 'dashboard/components/widgets/WootWriter/AudioRecorder.vue';
+import WebcamRecorder from 'dashboard/components/widgets/WootWriter/WebcamRecorder.vue';
 import { AUDIO_FORMATS } from 'shared/constants/messages';
 import { BUS_EVENTS } from 'shared/constants/busEvents';
 import { CMD_AI_ASSIST } from 'dashboard/helper/commandbar/events';
@@ -66,6 +67,7 @@ export default {
     ArticleSearchPopover,
     AttachmentPreview,
     AudioRecorder,
+    WebcamRecorder,
     ReplyBoxBanner,
     EmojiIconPicker,
     MessageSignatureMissingAlert,
@@ -116,6 +118,7 @@ export default {
       showEmojiPicker: false,
       attachedFiles: [],
       isRecordingAudio: false,
+      isVideoRecorderOpen: false,
       recordingAudioState: '',
       recordingAudioDurationText: '',
       replyType: REPLY_EDITOR_MODES.REPLY,
@@ -1024,6 +1027,15 @@ export default {
       this.toggleAudioRecorder();
       useAlert(this.$t('CONVERSATION.REPLYBOX.AUDIO_CONVERSION_FAILED'));
     },
+    toggleVideoRecorder() {
+      this.isVideoRecorderOpen = !this.isVideoRecorderOpen;
+    },
+    onFinishVideoRecorder(file) {
+      this.isVideoRecorderOpen = false;
+      // A recorded video is a normal attachment (no isVoiceMessage flag); it
+      // rides the same onFileUpload path as the paperclip.
+      return file && this.onFileUpload(file);
+    },
     toggleTyping(status) {
       const conversationId = this.currentChat.id;
       const isPrivate = this.isPrivate;
@@ -1311,6 +1323,11 @@ export default {
           @play="recordingAudioState = 'playing'"
           @pause="recordingAudioState = 'paused'"
         />
+        <WebcamRecorder
+          v-if="isVideoRecorderOpen"
+          @finish-record="onFinishVideoRecorder"
+          @close="isVideoRecorderOpen = false"
+        />
         <CopilotEditorSection
           v-if="copilot.isActive.value && !showAudioRecorderEditor"
           :show-copilot-editor="copilot.showEditor.value"
@@ -1425,6 +1442,7 @@ export default {
         :quoted-reply-enabled="quotedReplyPreference"
         :toggle-audio-recorder-play-pause="toggleAudioRecorderPlayPause"
         :toggle-audio-recorder="toggleAudioRecorder"
+        :toggle-video-recorder="toggleVideoRecorder"
         :toggle-emoji-picker="toggleEmojiPicker"
         :message="message"
         :portal-slug="connectedPortalSlug"
