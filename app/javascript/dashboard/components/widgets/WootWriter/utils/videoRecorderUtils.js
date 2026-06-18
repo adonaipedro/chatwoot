@@ -34,11 +34,14 @@ export function pickRecorderMimeType(isSupported) {
   return match ? { ...match } : null;
 }
 
-// Filename for the recorded clip. Chatwoot classifies attachments by MIME
+// Filename for the recorded clip. The `recado-de-video-` prefix is the signal
+// the sales-ai backend uses to send this webcam recording to WhatsApp as a
+// "Recado de Vídeo" (PTV / video note) instead of a regular video — see
+// chatwoot_webhook._is_recado. Chatwoot itself classifies the attachment by MIME
 // prefix (video/*), not extension; the extension just keeps the name honest.
 // `tsString` is injected so this stays pure (no Date.now() here).
 export function filenameFor(mime, tsString) {
   const ext = String(mime || '').includes('mp4') ? 'mp4' : 'webm';
   const ts = tsString ? String(tsString) : '';
-  return ts ? `gravacao-${ts}.${ext}` : `gravacao.${ext}`;
+  return ts ? `recado-de-video-${ts}.${ext}` : `recado-de-video.${ext}`;
 }

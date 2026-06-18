@@ -39,22 +39,22 @@ describe('videoRecorderUtils', () => {
 
   describe('filenameFor', () => {
     it('uses an mp4 extension for any mp4 mime', () => {
-      expect(filenameFor('video/mp4', '7')).toBe('gravacao-7.mp4');
+      expect(filenameFor('video/mp4', '7')).toBe('recado-de-video-7.mp4');
       expect(filenameFor('video/mp4;codecs=avc1.42E01E,mp4a.40.2', '1')).toBe(
-        'gravacao-1.mp4'
+        'recado-de-video-1.mp4'
       );
     });
 
     it('uses a webm extension for webm / unknown / empty mime', () => {
       expect(filenameFor('video/webm;codecs=vp8,opus', '9')).toBe(
-        'gravacao-9.webm'
+        'recado-de-video-9.webm'
       );
-      expect(filenameFor('', '9')).toBe('gravacao-9.webm');
-      expect(filenameFor(null, '9')).toBe('gravacao-9.webm');
+      expect(filenameFor('', '9')).toBe('recado-de-video-9.webm');
+      expect(filenameFor(null, '9')).toBe('recado-de-video-9.webm');
     });
 
     it('drops the timestamp segment when none is given', () => {
-      expect(filenameFor('video/mp4')).toBe('gravacao.mp4');
+      expect(filenameFor('video/mp4')).toBe('recado-de-video.mp4');
     });
   });
 });

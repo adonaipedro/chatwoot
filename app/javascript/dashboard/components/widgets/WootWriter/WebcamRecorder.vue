@@ -17,6 +17,8 @@ const props = defineProps({
 const emit = defineEmits(['finishRecord', 'close']);
 
 const MB = 1024 * 1024;
+// Side of the square clip we record (a video note renders in a round bubble).
+const RECORD_SIZE = 720;
 
 const previewRef = ref(null);
 const status = ref('starting'); // starting | idle | recording | recorded | error
@@ -34,6 +36,11 @@ let recordedFile = null;
 let playbackUrl = null;
 let tickHandle = null;
 let startedAt = 0;
+// Square-recording pipeline: a canvas fed by an offscreen <video> of the camera,
+// center-cropped to RECORD_SIZE². squareStream is what we actually record.
+let squareStream = null;
+let squareVideo = null;
+let rafHandle = null;
 
 const msgClass = computed(() => {
   if (messageType.value === 'error') return 'text-n-ruby-11';
@@ -52,6 +59,64 @@ const stopStream = () => {
   if (stream) {
     stream.getTracks().forEach(t => t.stop());
     stream = null;
+  }
+};
+
+// Produce a guaranteed-square (RECORD_SIZE²) MediaStream by center-cropping the
+// camera into a canvas, so the clip fits WhatsApp's round "Recado de Vídeo"
+// bubble without losing the sides. Returns null — and the caller records the raw
+// camera stream instead — whenever the browser can't drive a canvas stream, so
+// recording itself can never break.
+const buildSquareStream = src => {
+  try {
+    if (!src || !src.getVideoTracks?.().length) return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = RECORD_SIZE;
+    canvas.height = RECORD_SIZE;
+    const ctx = canvas.getContext('2d');
+    if (!ctx || typeof canvas.captureStream !== 'function') return null;
+
+    squareVideo = document.createElement('video');
+    squareVideo.muted = true;
+    squareVideo.playsInline = true;
+    squareVideo.srcObject = src;
+    squareVideo.play().catch(() => {});
+
+    const draw = () => {
+      const vw = squareVideo?.videoWidth || 0;
+      const vh = squareVideo?.videoHeight || 0;
+      if (vw && vh) {
+        const side = Math.min(vw, vh);
+        const sx = (vw - side) / 2;
+        const sy = (vh - side) / 2;
+        ctx.drawImage(squareVideo, sx, sy, side, side, 0, 0, RECORD_SIZE, RECORD_SIZE);
+      }
+      rafHandle = requestAnimationFrame(draw);
+    };
+    rafHandle = requestAnimationFrame(draw);
+
+    const out = canvas.captureStream(30);
+    const audio = src.getAudioTracks?.()[0];
+    if (audio) out.addTrack(audio); // reuse the live mic track (shared with `stream`)
+    return out;
+  } catch (e) {
+    return null;
+  }
+};
+
+const stopSquareStream = () => {
+  if (rafHandle) {
+    cancelAnimationFrame(rafHandle);
+    rafHandle = null;
+  }
+  if (squareStream) {
+    // Stop only the canvas video track; the audio track is owned by `stream`.
+    squareStream.getVideoTracks().forEach(t => t.stop());
+    squareStream = null;
+  }
+  if (squareVideo) {
+    squareVideo.srcObject = null;
+    squareVideo = null;
   }
 };
 const clearPlayback = () => {
@@ -96,9 +161,14 @@ const startCamera = async () => {
   message.value = 'Iniciando a câmera…';
   try {
     stream = await navigator.mediaDevices.getUserMedia({
+      // A "Recado de Vídeo" (PTV) renders in a round bubble, so we want a square
+      // clip. Ask the camera for square (ideal, never `exact`, so it can't throw
+      // OverconstrainedError); the canvas pipeline in startRecording guarantees
+      // an exact 720×720 even when the camera ignores the hint.
       video: {
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
+        width: { ideal: RECORD_SIZE },
+        height: { ideal: RECORD_SIZE },
+        aspectRatio: { ideal: 1 },
         frameRate: { ideal: 30, max: 30 },
       },
       audio: true,
@@ -121,6 +191,7 @@ const stopRecording = () => {
 };
 
 const finalize = () => {
+  stopSquareStream(); // recording captured — stop the canvas draw loop
   const mime =
     chosen?.mimeType || (chunks[0] && chunks[0].type) || 'video/webm';
   const blob = new Blob(chunks, { type: mime });
@@ -165,11 +236,15 @@ const startRecording = () => {
   const opts = { videoBitsPerSecond: 1500000, audioBitsPerSecond: 96000 };
   if (chosen) opts.mimeType = chosen.mimeType;
 
+  // Record the square canvas stream; fall back to the raw camera if unavailable.
+  squareStream = buildSquareStream(stream);
+  const recordStream = squareStream || stream;
+
   try {
-    recorder = new MediaRecorder(stream, opts);
+    recorder = new MediaRecorder(recordStream, opts);
   } catch (e) {
     try {
-      recorder = new MediaRecorder(stream);
+      recorder = new MediaRecorder(recordStream);
       chosen = null;
     } catch (e2) {
       setError(e2);
@@ -207,6 +282,7 @@ const startRecording = () => {
 };
 
 const redo = () => {
+  stopSquareStream();
   recordedFile = null;
   attachLivePreview();
   status.value = 'idle';
@@ -227,6 +303,7 @@ const useRecording = () => {
 
 const onClose = () => {
   stopRecording();
+  stopSquareStream();
   stopStream();
   clearPlayback();
   emit('close');
@@ -235,6 +312,7 @@ const onClose = () => {
 onMounted(startCamera);
 onBeforeUnmount(() => {
   stopRecording();
+  stopSquareStream();
   stopStream();
   clearPlayback();
 });
